@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>eCourts Cause List Scraper</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style>
+        .step-card { transition: all 0.3s ease; }
+        .step-card.disabled { opacity: 0.5; pointer-events: none; }
+        .loading { border: 3px solid #f3f3f3; border-top: 3px solid #1a5490; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; display: inline-block; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .step-number { width: 32px; height: 32px; background: #1a5490; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; }
+        .step-number.completed { background: #10b981; }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
+    
+    <!-- Header -->
+    <div class="bg-white shadow-md">
+        <div class="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
+            <div class="flex items-center space-x-3">
+                <div class="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">
+                    <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-900">eCourts Cause List Scraper</h1>
+                    <p class="text-sm text-gray-600">Extract and download court cause lists</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+        
+        <!-- Alert Messages -->
+        <div id="alertContainer" class="mb-6"></div>
+
+        <!-- Progress Steps -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <div class="flex items-center justify-between">
+                <div class="flex-1 flex items-center">
+                    <div id="step1-indicator" class="step-number">1</div>
+                    <div class="flex-1 h-1 bg-gray-300 mx-2"></div>
+                </div>
+                <div class="flex-1 flex items-center">
+                    <div id="step2-indicator" class="step-number">2</div>
+                    <div class="flex-1 h-1 bg-gray-300 mx-2"></div>
+                </div>
+                <div class="flex-1 flex items-center">
+                    <div id="step3-indicator" class="step-number">3</div>
+                    <div class="flex-1 h-1 bg-gray-300 mx-2"></div>
+                </div>
+                <div class="flex-1 flex items-center">
+                    <div id="step4-indicator" class="step-number">4</div>
+                </div>
+            </div>
+            <div class="flex items-center justify-between mt-2 text-xs text-gray-600">
+                <span class="flex-1 text-center">Initialize</span>
+                <span class="flex-1 text-center">Location</span>
+                <span class="flex-1 text-center">Court & CAPTCHA</span>
+                <span class="flex-1 text-center">Results</span>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <!-- Left Panel - Form -->
+            <div class="lg:col-span-2">
+                
+                <!-- Step 1: Initialize -->
+                <div id="step1" class="step-card bg-white rounded-lg shadow-md p-6 mb-6">
+                    <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
+                        <span class="text-blue-600 mr-2">Step 1:</span> Initialize Scraper
+                    </h2>
+                    
+                    <button id="initBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition duration-200 flex items-center justify-center">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                        </svg>
+                        Start Scraping Process
+                    </button>
+                </div>
+
+                <!-- Step 2: Location Selection -->
+                <div id="step2" class="step-card bg-white rounded-lg shadow-md p-6 mb-6 disabled">
+                    <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
+                        <span class="text-blue-600 mr-2">Step 2:</span> Select Location
+                    </h2>
+
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">State *</label>
+                            <select id="stateSelect" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                <option value="">Select State</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">District *</label>
+                            <select id="districtSelect" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" disabled>
+                                <option value="">Select District</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Court Complex *</label>
+                            <select id="courtComplexSelect" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" disabled>
+                                <option value="">Select Court Complex</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 3: Court Details & CAPTCHA -->
+                <div id="step3" class="step-card bg-white rounded-lg shadow-md p-6 mb-6 disabled">
+                    <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
+                        <span class="text-blue-600 mr-2">Step 3:</span> Court Details & CAPTCHA
+                    </h2>
+
+                    <div class="space-y-4">
+                        <div id="establishmentDiv" class="hidden">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Court Establishment *</label>
+                            <select id="establishmentSelect" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                <option value="">Select Establishment</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Court Name *</label>
+                            <select id="courtSelect" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" disabled>
+                                <option value="">Select Court</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Cause List Date *</label>
+                            <input type="text" id="dateInput" placeholder="DD-MM-YYYY" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">CAPTCHA *</label>
+                            <div class="flex items-center space-x-3 mb-2">
+                                <div class="border-2 border-gray-300 rounded-lg p-2 bg-gray-50">
+                                    <img id="captchaImage" src="" alt="CAPTCHA" class="h-16" style="display: none;">
+                                </div>
+                                <button id="refreshCaptcha" class="p-2 bg-gray-200 hover:bg-gray-300 rounded-lg transition duration-200" title="Refresh CAPTCHA" disabled>
+                                    <svg class="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                            <input type="text" id="captchaInput" placeholder="Enter CAPTCHA text" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Case Type *</label>
+                            <div class="flex space-x-4">
+                                <label class="flex items-center cursor-pointer">
+                                    <input type="radio" name="caseType" value="civil" checked class="w-4 h-4 text-blue-600 focus:ring-blue-500">
+                                    <span class="ml-2 text-gray-700">Civil</span>
+                                </label>
+                                <label class="flex items-center cursor-pointer">
+                                    <input type="radio" name="caseType" value="criminal" class="w-4 h-4 text-blue-600 focus:ring-blue-500">
+                                    <span class="ml-2 text-gray-700">Criminal</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <button id="submitBtn" disabled class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg transition duration-200 flex items-center justify-center disabled:bg-gray-400 disabled:cursor-not-allowed">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            Fetch Cause List
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Right Panel - Info & Results -->
+            <div class="lg:col-span-1">
+                
+                <!-- Selection Summary -->
+                <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                    <h3 class="text-lg font-bold text-gray-800 mb-4">Selection Summary</h3>
+                    <div class="space-y-2 text-sm">
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">State:</span>
+                            <span id="summaryState" class="font-medium text-gray-800 text-right">-</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">District:</span>
+                            <span id="summaryDistrict" class="font-medium text-gray-800 text-right">-</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Complex:</span>
+                            <span id="summaryComplex" class="font-medium text-gray-800 text-right">-</span>
+                        </div>
+                        <div class="flex justify-between" id="summaryEstRow" style="display: none;">
+                            <span class="text-gray-600">Establishment:</span>
+                            <span id="summaryEstablishment" class="font-medium text-gray-800 text-right">-</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Court:</span>
+                            <span id="summaryCourt" class="font-medium text-gray-800 text-right">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Instructions -->
+                <div class="bg-blue-50 rounded-lg shadow-md p-6">
+                    <h3 class="text-lg font-bold text-blue-800 mb-3 flex items-center">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        Instructions
+                    </h3>
+                    <ol class="list-decimal list-inside space-y-2 text-sm text-gray-700">
+                        <li>Click "Start Scraping Process" to initialize</li>
+                        <li>Select State, District, and Court Complex</li>
+                        <li>If prompted, select Court Establishment</li>
+                        <li>Choose Court Name and verify the date</li>
+                        <li>Enter the CAPTCHA code shown in the image</li>
+                        <li>Select case type (Civil/Criminal) and submit</li>
+                        <li>View results and download the PDF report</li>
+                    </ol>
+                </div>
+
+            </div>
+
+        </div>
+
+        <!-- Results Section -->
+        <div id="resultsSection" class="hidden mt-6">
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xl font-bold text-gray-800 flex items-center">
+                        <svg class="w-6 h-6 text-green-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        Cause List Results
+                    </h2>
+                    <div class="flex items-center space-x-3">
+                        <span id="totalRecords" class="text-sm text-gray-600"></span>
+                        <button id="downloadBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200 flex items-center">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                            </svg>
+                            Download PDF
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead>
+                            <tr class="bg-gray-100 border-b">
+                                <th class="text-left py-3 px-4 text-sm font-semibold text-gray-700">Sr No</th>
+                                <th class="text-left py-3 px-4 text-sm font-semibold text-gray-700">Case Number</th>
+                                <th class="text-left py-3 px-4 text-sm font-semibold text-gray-700">Next Hearing</th>
+                                <th class="text-left py-3 px-4 text-sm font-semibold text-gray-700">Party Name</th>
+                                <th class="text-left py-3 px-4 text-sm font-semibold text-gray-700">Advocate</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsTableBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        let appState = {
+            stateValue: '', stateName: '',
+            districtValue: '', districtName: '',
+            courtComplexValue: '', courtComplexName: '',
+            establishmentValue: '', establishmentName: '',
+            courtValue: '', courtName: '',
+            pdfFile: ''
+        };
+
+        // Utility Functions
+        function showAlert(message, type = 'error') {
+            const alertContainer = document.getElementById('alertContainer');
+            const alertClass = type === 'success' ? 'bg-green-100 border-green-400 text-green-700' : 
+                              type === 'warning' ? 'bg-yellow-100 border-yellow-400 text-yellow-700' :
+                              'bg-red-100 border-red-400 text-red-700';
+            
+            const alert = document.createElement('div');
+            alert.className = `${alertClass} border px-4 py-3 rounded-lg mb-4`;
+            alert.innerHTML = `
+                <div class="flex items-center justify-between">
+                    <span>${message}</span>
+                    <button onclick="this.parentElement.parentElement.remove()" class="font-bold text-xl">&times;</button>
+                </div>
+            `;
+            alertContainer.appendChild(alert);
+            setTimeout(() => alert.remove(), 5000);
+        }
+
+        function showLoading(button) {
+            button.disabled = true;
+            const originalHTML = button.innerHTML;
+            button.setAttribute('data-original-html', originalHTML);
+            button.innerHTML = '<div class="loading mr-2"></div> <span>Processing...</span>';
+        }
+
+        function hideLoading(button) {
+            button.disabled = false;
+            const originalHTML = button.getAttribute('data-original-html');
+            if (originalHTML) {
+                button.innerHTML = originalHTML;
+            }
+        }
+
+        function updateStepIndicator(step, completed = false) {
+            const indicator = document.getElementById(`step${step}-indicator`);
+            if (completed) {
+                indicator.classList.add('completed');
+            }
+        }
+
+        function enableStep(stepId) {
+            document.getElementById(stepId).classList.remove('disabled');
+        }
+
+        // API Calls
+        async function apiCall(endpoint, data = {}) {
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                return await response.json();
+            } catch (error) {
+                throw new Error(`API call failed: ${error.message}`);
+            }
+        }
+
+        // Step 1: Initialize
+        document.getElementById('initBtn').addEventListener('click', async function() {
+            showLoading(this);
+            
+            try {
+                const result = await apiCall('/initialize');
+                if (result.success) {
+                    const stateSelect = document.getElementById('stateSelect');
+                    stateSelect.innerHTML = '<option value="">Select State</option>';
+                    result.states.forEach(state => {
+                        const option = document.createElement('option');
+                        option.value = state.value;
+                        option.textContent = state.text;
+                        option.setAttribute('data-text', state.text);
+                        stateSelect.appendChild(option);
+                    });
+                    
+                    enableStep('step2');
+                    updateStepIndicator(1, true);
+                    showAlert('Scraper initialized successfully! Please select your state.', 'success');
+                } else {
+                    showAlert(result.error || 'Initialization failed');
+                }
+            } catch (error) {
+                showAlert(error.message);
+            } finally {
+                hideLoading(this);
+            }
+        });
+
+        // State Selection
+        document.getElementById('stateSelect').addEventListener('change', async function() {
+            const value = this.value;
+            if (!value) return;
+            
+            appState.stateValue = value;
+            appState.stateName = this.options[this.selectedIndex].text;
+            document.getElementById('summaryState').textContent = appState.stateName;
+            
+            const districtSelect = document.getElementById('districtSelect');
+            districtSelect.disabled = true;
+            districtSelect.innerHTML = '<option value="">Loading...</option>';
+            
+            try {
+                const result = await apiCall('/select_state', { state_value: value });
+                if (result.success) {
+                    districtSelect.innerHTML = '<option value="">Select District</option>';
+                    result.districts.forEach(district => {
+                        const option = document.createElement('option');
+                        option.value = district.value;
+                        option.textContent = district.text;
+                        option.setAttribute('data-text', district.text);
+                        districtSelect.appendChild(option);
+                    });
+                    districtSelect.disabled = false;
+                    showAlert('State selected. Please select a district.', 'success');
+                } else {
+                    showAlert(result.error || 'Failed to load districts');
+                }
+            } catch (error) {
+                showAlert(error.message);
+            }
+        });
+
+        // District Selection
+        document.getElementById('districtSelect').addEventListener('change', async function() {
+            const value = this.value;
+            if (!value) return;
+            
+            appState.districtValue = value;
+            appState.districtName = this.options[this.selectedIndex].text;
+            document.getElementById('summaryDistrict').textContent = appState.districtName;
+            
+            const complexSelect = document.getElementById('courtComplexSelect');
+            complexSelect.disabled = true;
+            complexSelect.innerHTML = '<option value="">Loading...</option>';
+            
+            try {
+                const result = await apiCall('/select_district', { district_value: value });
+                if (result.success) {
+                    complexSelect.innerHTML = '<option value="">Select Court Complex</option>';
+                    result.court_complexes.forEach(complex => {
+                        const option = document.createElement('option');
+                        option.value = complex.value;
+                        option.textContent = complex.text;
+                        option.setAttribute('data-text', complex.text);
+                        complexSelect.appendChild(option);
+                    });
+                    complexSelect.disabled = false;
+                    showAlert('District selected. Please select a court complex.', 'success');
+                } else {
+                    showAlert(result.error || 'Failed to load court complexes');
+                }
+            } catch (error) {
+                showAlert(error.message);
+            }
+        });
+
+        // Court Complex Selection
+        document.getElementById('courtComplexSelect').addEventListener('change', async function() {
+            const value = this.value;
+            if (!value) return;
+            
+            appState.courtComplexValue = value;
+            appState.courtComplexName = this.options[this.selectedIndex].text;
+            document.getElementById('summaryComplex').textContent = appState.courtComplexName;
+            
+            updateStepIndicator(2, true);
+            enableStep('step3');
+            
+            try {
+                const result = await apiCall('/select_court_complex', { court_complex_value: value });
+                if (result.success) {
+                    if (result.establishment_required && result.establishments.length > 0) {
+                        const estDiv = document.getElementById('establishmentDiv');
+                        const estSelect = document.getElementById('establishmentSelect');
+                        estDiv.classList.remove('hidden');
+                        estSelect.innerHTML = '<option value="">Select Establishment</option>';
+                        result.establishments.forEach(est => {
+                            const option = document.createElement('option');
+                            option.value = est.value;
+                            option.textContent = est.text;
+                            option.setAttribute('data-text', est.text);
+                            estSelect.appendChild(option);
+                        });
+                        showAlert('Court complex selected. Please select an establishment.', 'success');
+                    } else {
+                        // No establishment required, load courts directly
+                        loadCourts(null);
+                    }
+                } else {
+                    showAlert(result.error || 'Failed to process court complex');
+                }
+            } catch (error) {
+                showAlert(error.message);
+            }
+        });
+
+        // Establishment Selection
+        document.getElementById('establishmentSelect').addEventListener('change', async function() {
+            const value = this.value;
+            if (!value) return;
+            
+            appState.establishmentValue = value;
+            appState.establishmentName = this.options[this.selectedIndex].text;
+            document.getElementById('summaryEstablishment').textContent = appState.establishmentName;
+            document.getElementById('summaryEstRow').style.display = 'flex';
+            
+            loadCourts(value);
+        });
+
+        // Load Courts
+        async function loadCourts(establishment) {
+            const courtSelect = document.getElementById('courtSelect');
+            courtSelect.disabled = true;
+            courtSelect.innerHTML = '<option value="">Loading...</option>';
+            
+            try {
+                const result = await apiCall('/select_establishment', { establishment_value: establishment });
+                if (result.success) {
+                    courtSelect.innerHTML = '<option value="">Select Court</option>';
+                    result.courts.forEach(court => {
+                        const option = document.createElement('option');
+                        option.value = court.value;
+                        option.textContent = court.text;
+                        option.setAttribute('data-text', court.text);
+                        courtSelect.appendChild(option);
+                    });
+                    courtSelect.disabled = false;
+                    showAlert('Please select a court.', 'success');
+                } else {
+                    showAlert(result.error || 'Failed to load courts');
+                }
+            } catch (error) {
+                showAlert(error.message);
+            }
+        }
+
+        // Court Selection
+        document.getElementById('courtSelect').addEventListener('change', async function() {
+            const value = this.value;
+            if (!value) return;
+            
+            appState.courtValue = value;
+            appState.courtName = this.options[this.selectedIndex].text;
+            document.getElementById('summaryCourt').textContent = appState.courtName;
+            
+            updateStepIndicator(3, true);
+            
+            try {
+                const result = await apiCall('/select_court', { court_value: value });
+                if (result.success) {
+                    document.getElementById('captchaImage').src = result.captcha_image;
+                    document.getElementById('captchaImage').style.display = 'block';
+                    document.getElementById('dateInput').value = result.default_date;
+                    document.getElementById('refreshCaptcha').disabled = false;
+                    document.getElementById('submitBtn').disabled = false;
+                    showAlert('Court selected. Please enter the CAPTCHA and submit.', 'success');
+                } else {
+                    showAlert(result.error || 'Failed to load court details');
+                }
+            } catch (error) {
+                showAlert(error.message);
+            }
+        });
+
+        // Refresh CAPTCHA
+        document.getElementById('refreshCaptcha').addEventListener('click', async function() {
+            this.disabled = true;
+            try {
+                const result = await apiCall('/refresh_captcha');
+                if (result.success) {
+                    document.getElementById('captchaImage').src = result.captcha_image;
+                    document.getElementById('captchaInput').value = '';
+                    showAlert('CAPTCHA refreshed', 'success');
+                } else {
+                    showAlert(result.error || 'Failed to refresh CAPTCHA');
+                }
+            } catch (error) {
+                showAlert(error.message);
+            } finally {
+                this.disabled = false;
+            }
+        });
+
+        // Submit Form
+        document.getElementById('submitBtn').addEventListener('click', async function() {
+            const captcha = document.getElementById('captchaInput').value.trim();
+            const date = document.getElementById('dateInput').value.trim();
+            const caseType = document.querySelector('input[name="caseType"]:checked').value;
+            
+            if (!captcha) {
+                showAlert('Please enter the CAPTCHA code', 'warning');
+                return;
+            }
+            
+            showLoading(this);
+            
+            try {
+                const result = await apiCall('/submit', {
+                    captcha: captcha,
+                    date: date,
+                    case_type: caseType,
+                    state_name: appState.stateName,
+                    district_name: appState.districtName,
+                    court_complex_name: appState.courtComplexName,
+                    establishment_name: appState.establishmentName,
+                    court_name: appState.courtName
+                });
+                
+                if (result.success) {
+                    updateStepIndicator(4, true);
+                    appState.pdfFile = result.pdf_file;
+                    
+                    displayResults(result.data, result.total_records);
+                    showAlert(`Successfully fetched ${result.total_records} records!`, 'success');
+                } else {
+                    showAlert(result.error || 'Failed to fetch cause list. Please check CAPTCHA and try again.');
+                }
+            } catch (error) {
+                showAlert(error.message);
+            } finally {
+                hideLoading(this);
+            }
+        });
+
+        // Display Results
+        function displayResults(data, total) {
+            const tbody = document.getElementById('resultsTableBody');
+            tbody.innerHTML = '';
+            
+            let currentCategory = null;
+            
+            data.forEach(entry => {
+                if (entry.Category && entry.Category !== currentCategory) {
+                    currentCategory = entry.Category;
+                    const categoryRow = document.createElement('tr');
+                    categoryRow.className = 'bg-blue-50';
+                    categoryRow.innerHTML = `
+                        <td colspan="5" class="py-2 px-4 font-semibold text-blue-800">
+                            ${entry.Category}
+                        </td>
+                    `;
+                    tbody.appendChild(categoryRow);
+                }
+                
+                const row = document.createElement('tr');
+                row.className = 'border-b hover:bg-gray-50';
+                row.innerHTML = `
+                    <td class="py-3 px-4 text-sm">${entry['Sr No']}</td>
+                    <td class="py-3 px-4 text-sm">${entry['Case Number']}</td>
+                    <td class="py-3 px-4 text-sm">${entry['Next Hearing Date']}</td>
+                    <td class="py-3 px-4 text-sm">${entry['Party Name']}</td>
+                    <td class="py-3 px-4 text-sm">${entry['Advocate']}</td>
+                `;
+                tbody.appendChild(row);
+            });
+            
+            document.getElementById('totalRecords').textContent = `Total Records: ${total}`;
+            document.getElementById('resultsSection').classList.remove('hidden');
+            
+            // Smooth scroll to results
+            setTimeout(() => {
+                document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 100);
+        }
+
+        // Download PDF
+        document.getElementById('downloadBtn').addEventListener('click', function() {
+            if (appState.pdfFile) {
+                window.location.href = `/download/${appState.pdfFile}`;
+            }
+        });
+    </script>
+
+</body>
+</html>

@@ -1,50 +1,108 @@
 # eCourts Cause List Scraper
 
-A Python automation tool to scrape cause list data from the eCourts India portal and generate PDF reports.
+A web-based tool to scrape and download cause lists from the eCourts India portal with an intuitive UI.
 
 ## Features
 
-- Interactive selection of State, District, Court Complex, Establishment, and Court Name
-- Automated form filling and CAPTCHA input
-- Extracts cause list data including case numbers, party names, advocates, and hearing dates
-- Generates formatted PDF reports grouped by case categories
-- Supports both Civil and Criminal case types
+- 🔄 Step-by-step guided workflow
+- 🎨 Modern, responsive web interface
+- 🔐 CAPTCHA handling with refresh option
+- 📊 Real-time selection summary
+- 📄 Automatic PDF report generation
+- ✅ Visual progress tracking
 
-## Requirements
+## Prerequisites
+
+- Python 3.7+
+- Chrome browser
+- ChromeDriver (matching your Chrome version)
+
+## Installation
+
+1. **Clone or download the project**
+
+2. **Install dependencies**
 ```bash
-pip install selenium reportlab
+pip install flask selenium reportlab
 ```
 
-- Chrome browser
-- ChromeDriver (compatible with your Chrome version)
+3. **Setup ChromeDriver**
+   - Download from [ChromeDriver Downloads](https://chromedriver.chromium.org/downloads)
+   - Add to system PATH or place in project directory
+
+## Project Structure
+
+```
+project/
+│
+├── main.py              # Flask backend
+└── templates/
+    └── index.html       # Frontend UI
+```
 
 ## Usage
 
-1. Run the script:
+1. **Start the application**
 ```bash
-python script.py
+python main.py
 ```
 
-2. Follow the interactive prompts:
-   - Select State, District, Court Complex, and Court Name
-   - Enter date (DD-MM-YYYY format)
-   - Solve CAPTCHA displayed in browser
-   - Choose Civil or Criminal case type
+2. **Open browser**
+   - Navigate to `http://localhost:5000`
 
-3. PDF report will be automatically generated with filename:
-   `CauseList_{CaseType}_{Date}_{Timestamp}.pdf`
+3. **Follow the steps**
+   - Click "Start Scraping Process"
+   - Select State → District → Court Complex
+   - Select Establishment (if required) → Court Name
+   - Enter/modify date (DD-MM-YYYY format)
+   - Solve CAPTCHA
+   - Choose case type (Civil/Criminal)
+   - Click "Fetch Cause List"
+
+4. **Download results**
+   - View results in the table
+   - Click "Download PDF" to save the report
 
 ## Output
 
-The PDF includes:
-- Court details and selected criteria
-- Cause list entries grouped by category
-- Case numbers, hearing dates, party names, and advocates
-- Professional landscape-oriented formatting
+PDF files are generated with the naming format:
+```
+CauseList_[CaseType]_[Date]_[Timestamp].pdf
+```
+
+## Features Explained
+
+- **Session Management**: Each user gets an isolated browser session
+- **Progressive Workflow**: Steps unlock as you progress
+- **CAPTCHA Refresh**: Refresh CAPTCHA if unclear
+- **Data Validation**: Ensures all required fields are filled
+- **Categorized Results**: Data grouped by case categories
+- **PDF Export**: Professional formatted PDF reports
+
+## Troubleshooting
+
+**Browser not opening?**
+- Ensure ChromeDriver is installed and matches Chrome version
+
+**CAPTCHA errors?**
+- Click refresh icon to get a new CAPTCHA
+- Ensure text is entered exactly as shown
+
+**No data found?**
+- Verify date format (DD-MM-YYYY)
+- Check if court has listings for selected date
+- Try different case type (Civil/Criminal)
 
 ## Notes
 
-- Requires active internet connection
-- Browser window will open during execution
-- CAPTCHA must be manually entered
-- Uncomment `--headless` in chrome_options for background execution (after CAPTCHA automation)
+- The scraper maintains backend functionality identical to the original CLI script
+- Each session requires solving a CAPTCHA (eCourts security requirement)
+- Browser instance closes automatically after successful data retrieval
+
+## License
+
+For educational and personal use only. Please respect eCourts India's terms of service.
+
+## Support
+
+For issues or questions, please check the eCourts India portal status and ensure all prerequisites are properly installed.

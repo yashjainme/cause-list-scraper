@@ -1,3 +1,4 @@
+from flask import Flask, render_template, request, jsonify, send_file, session
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait, Select
@@ -7,33 +8,56 @@ from selenium.common.exceptions import TimeoutException, NoAlertPresentException
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.units import inch
 from datetime import datetime
 import time
+import os
+import uuid
 
-def scrape_ecourts_cause_list():
-    # --- Configuration ---
-    chrome_options = Options()
-    # chrome_options.add_argument("--headless")  # Uncomment for headless mode after implementation of the captcha localization
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
+app = Flask(__name__)
+app.secret_key = 'your-secret-key-here'  # Change this to a random secret key
 
-    driver = webdriver.Chrome(options=chrome_options)
+# Store driver instances per session
+drivers = {}
 
+def get_driver(session_id):
+    if session_id not in drivers:
+        chrome_options = Options()
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        drivers[session_id] = webdriver.Chrome(options=chrome_options)
+    return drivers[session_id]
+
+def cleanup_driver(session_id):
+    if session_id in drivers:
+        try:
+            drivers[session_id].quit()
+        except:
+            pass
+        del drivers[session_id]
+
+@app.route('/')
+def index():
+    if 'session_id' not in session:
+        session['session_id'] = str(uuid.uuid4())
+    return render_template('index.html')
+
+@app.route('/initialize', methods=['POST'])
+def initialize():
     try:
-        # Navigate to the Cause List page
+        session_id = session.get('session_id')
+        driver = get_driver(session_id)
+        
         url = "https://services.ecourts.gov.in/ecourtindia_v6/?p=cause_list/"
-        print(f"Navigating to {url}...")
         driver.get(url)
-
-        # --- ADDED: 5-second delay to allow the page to fully load and settle ---
+        
         print("\n--- Pausing for 5 seconds to let the page settle ---")
         time.sleep(5)
-
+        
         wait = WebDriverWait(driver, 20)
-
-        # --- More reliable modal closing ---
+        
+        # Close modal if present
         try:
             print("\n--- Checking for initial modal popup ---")
             modal_close_button = WebDriverWait(driver, 10).until(
@@ -44,62 +68,97 @@ def scrape_ecourts_cause_list():
             time.sleep(2) 
         except TimeoutException:
             print("Initial modal did not appear, proceeding with script.")
-        # --- End of modal handling ---
-
-
-        # --- Step 1: State Selection ---
-        print("\n--- Please select the State ---")
+        
+        # Get states
         state_select_element = wait.until(EC.presence_of_element_located((By.ID, "sess_state_code")))
         state_options = state_select_element.find_elements(By.TAG_NAME, "option")
         
-        state_names = [opt.text for opt in state_options if opt.get_attribute("value") != "0"]
-        for i, name in enumerate(state_names, 1):
-            print(f"{i}. {name}")
-        state_choice = int(input("Enter the number corresponding to your State: "))
-        selected_state_name = state_names[state_choice - 1]
+        states = []
+        for opt in state_options:
+            if opt.get_attribute("value") != "0":
+                states.append({
+                    "value": opt.get_attribute("value"),
+                    "text": opt.text
+                })
         
-        select_state = Select(state_select_element)
-        select_state.select_by_visible_text(selected_state_name)
-        
-        print(f"Selected State: {selected_state_name}")
+        return jsonify({"success": True, "states": states})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
-        # --- Step 2: District Selection ---
+@app.route('/select_state', methods=['POST'])
+def select_state():
+    try:
+        session_id = session.get('session_id')
+        driver = get_driver(session_id)
+        state_value = request.json.get('state_value')
+        
+        state_select_element = driver.find_element(By.ID, "sess_state_code")
+        select_state = Select(state_select_element)
+        select_state.select_by_value(state_value)
+        
         time.sleep(2)
+        
+        # Get districts
         district_select_element = driver.find_element(By.ID, "sess_dist_code")
         district_options = district_select_element.find_elements(By.TAG_NAME, "option")
-        district_names = [opt.text for opt in district_options if opt.get_attribute("value") != "0"]
-        print(f"\n--- Please select the District for {selected_state_name} ---")
-        for i, name in enumerate(district_names, 1):
-            print(f"{i}. {name}")
-        district_choice = int(input("Enter the number corresponding to your District: "))
-        selected_district_name = district_names[district_choice - 1]
+        
+        districts = []
+        for opt in district_options:
+            if opt.get_attribute("value") != "0":
+                districts.append({
+                    "value": opt.get_attribute("value"),
+                    "text": opt.text
+                })
+        
+        return jsonify({"success": True, "districts": districts})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
+@app.route('/select_district', methods=['POST'])
+def select_district():
+    try:
+        session_id = session.get('session_id')
+        driver = get_driver(session_id)
+        district_value = request.json.get('district_value')
+        
+        district_select_element = driver.find_element(By.ID, "sess_dist_code")
         select_district = Select(district_select_element)
-        select_district.select_by_visible_text(selected_district_name)
-
-        print(f"Selected District: {selected_district_name}")
-
-        # --- Step 3: Court Complex Selection ---
-        time.sleep(2)
-        court_complex_select_element = driver.find_element(By.ID, "court_complex_code")
-        court_complex_options = court_complex_select_element.find_elements(By.TAG_NAME, "option")
-        court_complex_names = [opt.text for opt in court_complex_options if opt.get_attribute("value") != "0"]
-        print(f"\n--- Please select the Court Complex for {selected_district_name} ---")
-        for i, name in enumerate(court_complex_names, 1):
-           print(f"{i}. {name}")
-        court_complex_choice = int(input("Enter the number corresponding to your Court Complex: "))
-        selected_court_complex_name = court_complex_names[court_complex_choice - 1]
-
-        select_court_complex = Select(court_complex_select_element)
-        select_court_complex.select_by_visible_text(selected_court_complex_name)
-
-        print(f"Selected Court Complex: {selected_court_complex_name}")
-
-        # --- Step 4: Handle Establishment (with Alert handling) ---
-        establishment_present = False
-        selected_est_name = None
+        select_district.select_by_value(district_value)
         
         time.sleep(2)
+        
+        # Get court complexes
+        court_complex_select_element = driver.find_element(By.ID, "court_complex_code")
+        court_complex_options = court_complex_select_element.find_elements(By.TAG_NAME, "option")
+        
+        court_complexes = []
+        for opt in court_complex_options:
+            if opt.get_attribute("value") != "0":
+                court_complexes.append({
+                    "value": opt.get_attribute("value"),
+                    "text": opt.text
+                })
+        
+        return jsonify({"success": True, "court_complexes": court_complexes})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/select_court_complex', methods=['POST'])
+def select_court_complex():
+    try:
+        session_id = session.get('session_id')
+        driver = get_driver(session_id)
+        court_complex_value = request.json.get('court_complex_value')
+        
+        court_complex_select_element = driver.find_element(By.ID, "court_complex_code")
+        select_court_complex = Select(court_complex_select_element)
+        select_court_complex.select_by_value(court_complex_value)
+        
+        time.sleep(2)
+        
+        # Check for alert and establishments
+        establishment_required = False
+        establishments = []
         
         try:
             print("\n--- Checking for establishment alert ---")
@@ -108,13 +167,13 @@ def scrape_ecourts_cause_list():
             print(f"Alert detected: {alert_text}")
             alert.accept()
             print("Alert accepted.")
-            establishment_present = True
+            establishment_required = True
         except TimeoutException:
             print("No alert detected. Establishment may not be required.")
         except NoAlertPresentException:
             print("No alert present.")
-
-        if establishment_present:
+        
+        if establishment_required:
             try:
                 print("\n--- Waiting for Establishment dropdown ---")
                 est_div = WebDriverWait(driver, 5).until(
@@ -124,108 +183,178 @@ def scrape_ecourts_cause_list():
                 
                 est_select_element = driver.find_element(By.ID, "court_est_code")
                 est_options = est_select_element.find_elements(By.TAG_NAME, "option")
-                est_names = [opt.text for opt in est_options if opt.get_attribute("value") != "0"]
                 
-                if est_names:
-                    print(f"\n--- Please select the Court Establishment ---")
-                    for i, name in enumerate(est_names, 1):
-                        print(f"{i}. {name}")
-                    est_choice = int(input("Enter the number corresponding to your Court Establishment: "))
-                    if 1 <= est_choice <= len(est_names):
-                        selected_est_name = est_names[est_choice - 1]
-                        select_est = Select(est_select_element)
-                        select_est.select_by_visible_text(selected_est_name)
-                        print(f"Selected Establishment: {selected_est_name}")
-                else:
-                    print("No establishment options available.")
+                for opt in est_options:
+                    if opt.get_attribute("value") != "0":
+                        establishments.append({
+                            "value": opt.get_attribute("value"),
+                            "text": opt.text
+                        })
             except TimeoutException:
                 print("Establishment dropdown did not appear. Continuing...")
-            except Exception as e:
-                print(f"Error handling establishment: {e}")
+        
+        return jsonify({
+            "success": True, 
+            "establishment_required": establishment_required,
+            "establishments": establishments
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
-        # --- Step 5: Court Name Selection ---
-        time.sleep(2)
+@app.route('/select_establishment', methods=['POST'])
+def select_establishment():
+    try:
+        session_id = session.get('session_id')
+        driver = get_driver(session_id)
+        establishment_value = request.json.get('establishment_value')
+        
+        if establishment_value:
+            est_select_element = driver.find_element(By.ID, "court_est_code")
+            select_est = Select(est_select_element)
+            select_est.select_by_value(establishment_value)
+            time.sleep(2)
+        
+        # Get courts
         court_name_select_element = driver.find_element(By.ID, "CL_court_no")
         court_name_options = court_name_select_element.find_elements(By.TAG_NAME, "option")
-        court_name_names = [opt.text for opt in court_name_options if opt.get_attribute("value") != ""]
-        print(f"\n--- Please select the Court Name ---")
-        for i, name in enumerate(court_name_names, 1):
-            print(f"{i}. {name}")
-        court_name_choice = int(input("Enter the number corresponding to your Court Name: "))
-        selected_court_name = court_name_names[court_name_choice - 1]
         
-        select_court_name = Select(court_name_select_element)
-        select_court_name.select_by_visible_text(selected_court_name)
+        courts = []
+        for opt in court_name_options:
+            if opt.get_attribute("value") != "":
+                courts.append({
+                    "value": opt.get_attribute("value"),
+                    "text": opt.text
+                })
         
-        print(f"Selected Court Name: {selected_court_name}")
+        return jsonify({"success": True, "courts": courts})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
-        # --- Step 6: Date Selection ---
+@app.route('/select_court', methods=['POST'])
+def select_court():
+    try:
+        session_id = session.get('session_id')
+        driver = get_driver(session_id)
+        court_value = request.json.get('court_value')
+        
+        court_name_select_element = driver.find_element(By.ID, "CL_court_no")
+        select_court_name = Select(court_name_select_element)
+        select_court_name.select_by_value(court_value)
+        
+        time.sleep(1)
+        
+        # Get date and captcha
         date_input = driver.find_element(By.ID, "causelist_date")
         current_date = date_input.get_attribute("value")
-        new_date = input(f"\nEnter the Cause List Date (DD-MM-YYYY) [Current: {current_date}, Press Enter to keep]: ")
-        if new_date.strip():
-            date_input.clear()
-            date_input.send_keys(new_date)
-            final_date = new_date
-            print(f"Set Date to: {new_date}")
-        else:
-            final_date = current_date
-            print(f"Keeping default Date: {current_date}")
+        
+        # Get CAPTCHA image as base64
+        captcha_img = driver.find_element(By.ID, "captcha_image")
+        captcha_base64 = driver.execute_script("""
+            var canvas = document.createElement('canvas');
+            var ctx = canvas.getContext('2d');
+            var img = arguments[0];
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            ctx.drawImage(img, 0, 0);
+            return canvas.toDataURL('image/png');
+        """, captcha_img)
+        
+        return jsonify({
+            "success": True,
+            "default_date": current_date,
+            "captcha_image": captcha_base64
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
-        # --- Step 7: CAPTCHA Handling ---
-        captcha_img = wait.until(EC.presence_of_element_located((By.ID, "captcha_image")))
-        print(f"\n--- CAPTCHA IMAGE ---")
-        print("Please look at the CAPTCHA image displayed in the browser window.")
-        captcha_text = input("Enter CAPTCHA: ").strip()
+@app.route('/refresh_captcha', methods=['POST'])
+def refresh_captcha():
+    try:
+        session_id = session.get('session_id')
+        driver = get_driver(session_id)
+        
+        # Click refresh using JavaScript since the onclick handler exists
+        driver.execute_script("refreshCaptcha();")
+        time.sleep(2)
+        
+        # Get new CAPTCHA image
+        captcha_img = driver.find_element(By.ID, "captcha_image")
+        captcha_base64 = driver.execute_script("""
+            var canvas = document.createElement('canvas');
+            var ctx = canvas.getContext('2d');
+            var img = arguments[0];
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            ctx.drawImage(img, 0, 0);
+            return canvas.toDataURL('image/png');
+        """, captcha_img)
+        
+        return jsonify({
+            "success": True,
+            "captcha_image": captcha_base64
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/submit', methods=['POST'])
+def submit():
+    try:
+        session_id = session.get('session_id')
+        driver = get_driver(session_id)
+        data = request.json
+        
+        # Set date if provided
+        if data.get('date'):
+            date_input = driver.find_element(By.ID, "causelist_date")
+            date_input.clear()
+            date_input.send_keys(data['date'])
+            final_date = data['date']
+        else:
+            date_input = driver.find_element(By.ID, "causelist_date")
+            final_date = date_input.get_attribute("value")
+        
+        # Enter CAPTCHA
         captcha_input = driver.find_element(By.ID, "cause_list_captcha_code")
         captcha_input.clear()
-        captcha_input.send_keys(captcha_text)
-        print(f"Entered CAPTCHA: {captcha_text}")
-
-        # --- Step 8: Submit Form ---
-        print("\n--- Submitting Form ---")
-        civil_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Civil')]")))
-        criminal_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Criminal')]")))
-
-        choice = input("Choose 'Civil' or 'Criminal' (Enter 'c' for Civil, 'r' for Criminal): ").lower().strip()
-        case_type = ""
-        if choice == 'c':
+        captcha_input.send_keys(data['captcha'])
+        
+        time.sleep(1)
+        
+        # Click appropriate button
+        wait = WebDriverWait(driver, 20)
+        case_type = data['case_type']
+        
+        if case_type == 'civil':
+            civil_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Civil')]")))
             civil_button.click()
-            case_type = "Civil"
-            print("Clicked 'Civil' button.")
-        elif choice == 'r':
-            criminal_button.click()
-            case_type = "Criminal"
-            print("Clicked 'Criminal' button.")
+            case_type_title = "Civil"
         else:
-            print("Invalid choice. Defaulting to 'Civil'.")
-            civil_button.click()
-            case_type = "Civil"
-
-        # --- Step 9: Wait for Results and Scrape Data ---
+            criminal_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Criminal')]")))
+            criminal_button.click()
+            case_type_title = "Criminal"
+        
         print("\n--- Waiting for Cause List Results ---")
         results_div = wait.until(EC.presence_of_element_located((By.ID, "res_cause_list")))
         time.sleep(5)
-
+        
+        # Check for no data
         try:
             no_data_element = driver.find_element(By.ID, "nodata")
             if no_data_element.is_displayed():
-                print("\n⚠ No records found for the selected criteria.")
-                return
+                return jsonify({"success": False, "error": "No records found for the selected criteria"})
         except:
             pass
-
+        
+        # Scrape data
         try:
             table = driver.find_element(By.ID, "dispTable")
         except:
-            print("\n⚠ No data table found in the results.")
-            return
-
+            return jsonify({"success": False, "error": "No data table found in the results"})
+        
         rows = table.find_elements(By.TAG_NAME, "tr")
-
         cause_list_data = []
         current_category = None
-
+        
         for row in rows:
             cells = row.find_elements(By.TAG_NAME, "td")
             if len(cells) > 0:
@@ -235,17 +364,17 @@ def scrape_ecourts_cause_list():
                     if category_text:
                         current_category = category_text
                         continue
-
+                
                 if len(cells) >= 4:
                     sr_no = cells[0].text.strip()
                     case_info_cell = cells[1]
                     party_cell = cells[2]
                     advocate_cell = cells[3]
-
+                    
                     case_link = None
                     case_number = ""
                     next_hearing = ""
-
+                    
                     if case_info_cell:
                         try:
                             view_link = case_info_cell.find_element(By.TAG_NAME, "a")
@@ -261,11 +390,10 @@ def scrape_ecourts_cause_list():
                                 next_hearing = part.replace('Next hearing date:-', '').strip()
                             else:
                                 case_number = part 
-
-
+                    
                     party_name = party_cell.text.strip() if party_cell else ""
                     advocate_name = advocate_cell.text.strip() if advocate_cell else ""
-
+                    
                     row_data = {
                         "Sr No": sr_no,
                         "Category": current_category,
@@ -276,47 +404,43 @@ def scrape_ecourts_cause_list():
                         "Advocate": advocate_name
                     }
                     cause_list_data.append(row_data)
-
-        # --- Step 10: Display Results ---
-        print(f"\n--- Scraped {len(cause_list_data)} Cause List Entries ---")
         
         if not cause_list_data:
-            print("\n⚠ No cause list entries were extracted.")
-            return
+            return jsonify({"success": False, "error": "No cause list entries were extracted"})
         
-        for entry in cause_list_data:
-            print(f"SR NO: {entry['Sr No']}")
-            print(f"  Category: {entry['Category']}")
-            print(f"  Case Number: {entry['Case Number']}")
-            print(f"  Next Hearing Date: {entry['Next Hearing Date']}")
-            print(f"  Party Name: {entry['Party Name']}")
-            print(f"  Advocate: {entry['Advocate']}")
-            print(f"  View Link: {entry['Case Link']}")
-            print("-" * 50)
-
-        # --- Step 11: Generate PDF ---
-        generate_pdf(
+        # Generate PDF
+        filename = generate_pdf(
             cause_list_data,
-            selected_state_name,
-            selected_district_name,
-            selected_court_complex_name,
-            selected_est_name,
-            selected_court_name,
+            data['state_name'],
+            data['district_name'],
+            data['court_complex_name'],
+            data.get('establishment_name'),
+            data['court_name'],
             final_date,
-            case_type
+            case_type_title
         )
-
-        print("\nScraping completed successfully!")
-
+        
+        # Cleanup driver after successful scraping
+        cleanup_driver(session_id)
+        
+        return jsonify({
+            "success": True,
+            "data": cause_list_data,
+            "pdf_file": filename,
+            "total_records": len(cause_list_data)
+        })
+        
     except Exception as e:
-        print(f"An error occurred during scraping: {e}")
         import traceback
         traceback.print_exc()
-    finally:
-        if 'driver' in locals() and driver:
-            driver.quit()
-        print("Browser closed.")
+        return jsonify({"success": False, "error": str(e)}), 500
 
+@app.route('/download/<filename>')
+def download(filename):
+    try:
+        return send_file(filename, as_attachment=True)
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 404
 
 def generate_pdf(data, state, district, court_complex, establishment, court_name, date, case_type):
     """Generate a PDF report from the scraped cause list data"""
@@ -411,6 +535,5 @@ def generate_pdf(data, state, district, court_complex, establishment, court_name
     print(f"\n✓ PDF generated successfully: {filename}")
     return filename
 
-# Run the scraper
 if __name__ == "__main__":
-    scrape_ecourts_cause_list()
+    app.run(debug=True, port=5000)
